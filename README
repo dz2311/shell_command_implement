@@ -1,0 +1,337 @@
+My design ideas are as follows:
+
+To begin with, I thinks the simple shell should start with a choice branch:
+
+
+                                  start
+                                    |
+                                  input
+                                    |
+                                   / \   
+     —————————————————————————————/   \——————————————————————————————
+     |               |         |           |          |              |
+     |               |         |           |          |              |
+   search path      exit       cd         pwd       path           history
+(like /bin/ls and ./ls)
+
+
+so I use if …else if … else if… else to help me distinguish what kind of command the user typed in. All commands’ names are store in an array(char *strCommand_name[6] = { "exit","cd ","pwd","path","history”};). Each command will be compared with each stored command name every time when the user input a command. Then my shell will label them by different number and use different functions according to different command.
+
+After executing functions which are prepared to deal with different situation, my shell can output required results. 
+
+———————————————————————————————————————
+REFERENCE
+———————————————————————————————————————
+1. C Programming for the Absolute Beginners  — the 3rd edition - by Keith Davenpork and Michael Vine
+2. Chinese Book “鸟哥的linux私房菜” - the 3rd edition
+3. Google command “chdir()”, “fork()”, “wait()”,”execvp()”.
+4. Examples of “fork()”, “wait()”,”execvp()”
+5. Man page.
+———————————————————————————————————————
+EXPLANATION of FUNCTIONS
+———————————————————————————————————————
+
+
+—————————————Search Path——————————————-
+search path : Because the user can just input relative path and absolute path, the shell can distinguish this situation by judge if the first input character if ‘/’ or if the first and the second character are ‘.’ and ‘/’ .
+
+
+int execu_tion(char *path)
+{
+    int status,i=0;
+    char *strPath = NULL, *p=NULL;
+    p = path;
+    strPath = strsep(&p," ");
+    char *argv[]={strPath,p,0};
+    pid_t child_pid = fork();
+    pid_t w;
+    if (child_pid==0)
+    {
+        i=execvp(argv[0], argv);
+        return i;
+    }
+    else if (child_pid < 0)
+    {
+        perror("fork");
+        //exit(EXIT_FAILURE);
+    }
+    else
+    {
+        do
+        {
+            w = waitpid(child_pid, &status, WUNTRACED | WCONTINUED);
+            if (w == -1)
+            {
+                perror("waitpid");
+                exit(EXIT_FAILURE);
+            }
+        } while (!WIFEXITED(status) && !WIFSIGNALED(status));
+        
+        
+    }
+    
+    if (i<=0)
+        printf("error:%s\n",strerror(errno));
+    // exit(EXIT_SUCCESS);
+    return i;
+}
+
+
+To search the path and execute the executable file needs another process, so I use “fork()” to create a child process and use “execvp()” to find the file and open it.
+
+
+
+—————————————    Exit    ——————————————-
+if the user type in “exit”, the process will be ended.
+I use exit() to finish this function.
+
+—————————————     cd      ——————————————-
+
+CD can be used to change direction. By typing in “cd directory(like Desktop)”, the shell will extract the directory name. I write a function to do that.
+
+////function\\\\
+char * extractRoute_cd(char *dest, const char *src, int n)
+{
+    int i;
+    
+    for (i=0;i<n&&src[i]!='\0';i++)
+    {
+        dest[i]=src[i+3];
+    }
+    dest[n]='\0';
+    dest[n-1] ='\0';
+    return dest;
+}
+
+After extracting the directory, the command chdir() will help shell to change directory.
+
+—————————————       pwd     ——————————————-
+
+Unlike “cd”, pwd doesn’t need a directory. Just by using getcwd(), the shell can display current directory.
+—————————————       history   ——————————————-
+“history”
+This command is for displaying command history. In order to store history, I use linked list to store data. The declaration is bellow:
+struct commandHistory
+{
+    int iOrder;
+    char *strDisplay_name;
+    char *strDirectory;
+    struct commandHistory *next;
+};
+
+Once the user input “cd directory”, “pwd” or “path”, the shell will put these commands into linked list to store them.
+
+I set a number (int iTotal_execution = 0). If the first command is input, the number will plus 1. The first command will be stored as the head of the linked list. I write a function to do that.
+
+struct commandHistory * write_History(int x, char *y, char *z, struct commandHistory * head)
+{
+    int j=0;
+    struct commandHistory * p1, *p2, *p3;
+    p2 = p3 = head;
+    p1 = (struct commandHistory *)malloc(LEN);
+    p1->iOrder = x-1;
+    p1->strDisplay_name = y;
+    p1->strDirectory = z;
+    p2 = p1;
+    for (int i=1; i<x; i++)
+    {
+        if (p3->next==NULL)
+        {
+            p3->next=p2;
+            p2->next=NULL;
+        }
+        else p3=p3->next;
+    }
+    if (x==101)
+    {
+        p2 = head;
+        head = head->next;
+        p3 = head;
+        free(p2);
+        for(j=0;j<100;j++)
+        {
+            p3->iOrder = j;
+            
+            if (j == 99)
+                p3->next = NULL;
+            else
+                p3=p3->next;
+        }
+        
+    }
+    return head;
+    
+    
+}
+
+When the user input more than 100 commands, the shell will delete the oldest record.
+
+If the current command is not the first command the user input, the shell will execute another function to store data according to existed  head of linked list.
+struct commandHistory * write_History(int x, char *y, char *z, struct commandHistory * head)
+{
+    int j=0;
+    struct commandHistory * p1, *p2, *p3;
+    p2 = p3 = head;
+    p1 = (struct commandHistory *)malloc(LEN);
+    p1->iOrder = x-1;
+    p1->strDisplay_name = y;
+    p1->strDirectory = z;
+    p2 = p1;
+    for (int i=1; i<x; i++)
+    {
+        if (p3->next==NULL)
+        {
+            p3->next=p2;
+            p2->next=NULL;
+        }
+        else p3=p3->next;
+    }
+    if (x==101)
+    {
+        p2 = head;
+        head = head->next;
+        p3 = head;
+        free(p2);
+        for(j=0;j<100;j++)
+        {
+            p3->iOrder = j;
+            
+            if (j == 99)
+                p3->next = NULL;
+            else
+                p3=p3->next;
+        }
+        
+    }
+    return head;
+    
+    
+}
+
+After the linked list is established, the record can be displayed by displaying all nodes’ content.
+void display_History(int clear_ornot, struct commandHistory * head)
+{
+    struct commandHistory * p;
+    p = head;
+    if (head == NULL)
+        printf("\nNo record");
+    else
+    {
+        while(p != NULL)
+        {
+            if (p->iOrder<10)
+                printf("%d        %s        %s\n",p->iOrder,p->strDisplay_name, p->strDirectory);
+            else if ((p->iOrder)>9)
+                printf("%d       %s        %s\n",p->iOrder,p->strDisplay_name, p->strDirectory);
+            else
+                printf("%d      %s        %s\n",p->iOrder,p->strDisplay_name, p->strDirectory);
+            p = p->next;
+        }
+    }
+    head = NULL;
+    
+    
+}
+
+
+———history -c———
+This command delete all records when executed. I accomplish this function by deleting all the node of the linked list. Once the shell detected the command “history”, it compares the input with “history -c”, if the return is true. The shell will free all the nodes on the linked list.
+
+int clear_History(struct commandHistory * head)
+{
+    struct commandHistory * p = NULL;
+    while(head!=NULL)
+    {
+        p = head;
+        head = head->next;
+        free(p);
+    }
+    return 1;
+}
+
+—————————————     path      ——————————————-
+
+Like the way storing history, storing path still needs linked list. 
+
+struct savePath
+{
+    char *path_name;
+    struct savePath *next;
+};
+
+And if the path is the first path the user’ve added, the head of the linked list should be created first.
+
+struct savePath * create_path_head(char *y)    //if the “path +” command is first used
+{
+    struct savePath * head = NULL;
+    struct savePath * p1;
+    p1 = (struct savePath *)malloc(LEN1);
+    p1->path_name = y;
+    head=p1;
+    //printf("\n%s----head",head->path_name);
+    
+    return head;
+}
+
+
+void write_Path(int x, char *y, struct savePath * head)  //if the “path +” command is 
+{                                                        //used more than 1 time.
+    struct savePath * p1, *p2, *p3;
+    p2 = p3 = head;
+    p1 = (struct savePath *)malloc(LEN1);
+    p1->path_name = y;
+    p2 = p1;
+    for (int i=1; i<x; i++)
+    {
+        if (p3->next==NULL)
+        {
+            p3->next=p2;
+            p2->next=NULL;
+            // printf("\n%s---%dnd",p2->path_name,x);
+        }
+        else p3=p3->next;
+    }
+}
+
+After the linked list is set up. The shell can display the path record by display it’s node’s content one by one.
+
+void display_path(struct savePath * head)
+{
+    struct savePath * p=NULL;
+    p = head;
+    if (p==NULL)
+    {
+        printf("\nNo path record");
+    }
+    else
+    {
+        while(p != NULL)
+        {
+            printf(" %s:",p->path_name);
+            p = p->next;
+        }
+    }
+}
+
+
+———  path +  ———
+
+They user can add a path to the shell. Like the command “cd directory”, the shell need to extract the content behind “path +”. I write a function to extract the path.
+
+char * extractRoute_path(char *dest, const char *src, int n)
+{
+    int i;
+    for (i=0;i<n&&src[i]!='\0';i++)
+    {
+        dest[i]=src[i+7];
+    }
+    dest[n]='\0';
+    //dest[n-1] ='\0';
+    return dest;
+}
+
+This function can return a char * which pointed to a string which stored the path. Then the shell will use functions I mentioned above to store this path into the linked list of path.
+
+———  path -  ———
+
+They user can use command “path -” to delete any path he wants. By using extractRoute_path(char *dest, const char *src, int n) , the shell can extract the filename  from “path - /filepath”. Then the shell compares the input filename with each stored file path, if the shell can find one to match the input filename, the shell will delete the record from the linked list.
